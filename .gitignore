@@ -9,3 +9,4 @@ server.log
 /.credentials.yaml
 *.pem
 *.key
+dsh-full-backup-*.tar.gz
