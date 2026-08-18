@@ -37,7 +37,7 @@ dsh-web-restart → @dsh-external/dsh-agent-rp → @dsh-external/dsh-visualize �
 # 1. 安装 Node.js LTS（如未装）: https://nodejs.org/
 # 2. 下载/克隆本仓库后，在仓库目录打开 PowerShell：
 
-git clone https://github.com/<你的用户名>/dsh-migration-kit.git
+git clone https://github.com/Rudyy898/dsh-migration-kit.git
 cd dsh-migration-kit
 
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
@@ -49,7 +49,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 # 1. 安装 Node.js ≥ 18（如未装）: https://nodejs.org/
 # 2. 克隆并运行：
 
-git clone https://github.com/<你的用户名>/dsh-migration-kit.git
+git clone https://github.com/Rudyy898/dsh-migration-kit.git
 cd dsh-migration-kit
 bash scripts/install.sh
 ```
