@@ -141,6 +141,14 @@ function Install-Plugins {
     return $code
   }
 
+  # 幂等检查：关键插件已装好（如 dsh-client-ui-pet）则跳过 pnpm（恢复/重跑场景）
+  $petPkg = Join-Path $ProfileDir "node_modules\@dsh-external\dsh-client-ui-pet\package.json"
+  if (Test-Path $petPkg) {
+    $ErrorActionPreference = $script:prevEAP
+    Log "检测到插件已安装（node_modules 就绪），跳过 pnpm install"
+    return
+  }
+
   if ((Run-PnpmInstall) -eq 0) {
     $ErrorActionPreference = $script:prevEAP
     Log "插件安装完成"
@@ -153,6 +161,13 @@ function Install-Plugins {
   if ((Run-PnpmInstall) -eq 0) {
     $ErrorActionPreference = $script:prevEAP
     Log "插件安装完成（构建已放行）"
+    return
+  }
+
+  # 最后兜底：再次检查 node_modules（可能 pnpm 其实装好了，只是退出码误报）
+  if (Test-Path $petPkg) {
+    $ErrorActionPreference = $script:prevEAP
+    Warn "pnpm 退出码异常，但检测到插件已就绪，继续安装流程"
     return
   }
 
