@@ -15,7 +15,7 @@ description: 清理 Windows 电脑 C 盘空间的技能。当用户说"清理 C 
 ## 清理脚本位置
 
 - **迁移包仓库**: `dsh-migration-kit/scripts/cleanup.ps1`（推送到 GitHub，所有机器可同步）
-- **家里 Windows 部署位置**: `D:\dsh-migration-kit\scripts\cleanup.ps1`
+- **家里 Windows 部署位置**: `D:\cleanup.ps1`
 - **任何机器**: clone 迁移包后 `scripts/cleanup.ps1`
 
 ## 使用方式
@@ -24,10 +24,10 @@ description: 清理 Windows 电脑 C 盘空间的技能。当用户说"清理 C 
 
 ```powershell
 # 通过 SSH 把清理脚本复制到家里（如果还没有）
-# 本地迁移包 → ssh_upload → D:\dsh-migration-kit\scripts\cleanup.ps1
+# 本地迁移包 → ssh_upload → D:\cleanup.ps1
 
 # SSH 执行清理
-ssh_exec alias=home command="powershell -ExecutionPolicy Bypass -File D:\dsh-migration-kit\scripts\cleanup.ps1 -Quiet"
+ssh_exec alias=home command="powershell -ExecutionPolicy Bypass -File D:\cleanup.ps1 -Quiet"
 ```
 
 ### 方式 B：用户本地运行
@@ -87,7 +87,9 @@ powershell -ExecutionPolicy Bypass -File cleanup.ps1 -DryRun
 
 ## 注意事项
 
-1. **先 DryRun 预览**再实际清理，避免误删
+1. **ps1 必须 UTF-8 BOM + CRLF**：PowerShell 5.1 读无 BOM 的 UTF-8 中文会按 GBK 解码导致语法错误（中文变乱码报 `字符串缺少终止符`）。传脚本前先 `python3` 加 BOM。
+2. **上传目标路径格式**：`/C:/Users/king/...`（正斜杠 + 盘符大写），`C:\...` 会报 `remotePath must be an absolute path`（见 home-ssh-remote skill）。
+3. **先 DryRun 预览**再实际清理，避免误删
 2. **清理后 C 盘 ≥ 20% 空闲**即健康（128GB 盘 ≥ 25GB）
 3. 商店游戏卸载 SSH 权限不够，需要用户手动（0x5 拒绝访问）
 4. Windows 更新缓存清理需停止 wuauserv 服务（脚本已处理）

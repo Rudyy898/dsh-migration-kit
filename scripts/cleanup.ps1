@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 # dsh-migration-kit 清理脚本 (cleanup.ps1) — Windows 一键清理 C 盘
 # 用法: powershell -ExecutionPolicy Bypass -File cleanup.ps1
 #       powershell -ExecutionPolicy Bypass -File cleanup.ps1 -DryRun  # 只预览不清
