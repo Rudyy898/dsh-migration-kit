@@ -31,6 +31,15 @@ dsh-web-restart → @dsh-external/dsh-agent-rp → @dsh-external/dsh-visualize �
 
 ## 🚀 快速开始
 
+> **网络慢 / 克隆卡住？** 本仓库含 59MB 素材，GitHub 直连可能很慢。国内网络建议先配好代理：
+> ```bash
+> # 以 Clash 等 7899 端口为例（按你的实际代理端口改）
+> export https_proxy=http://127.0.0.1:7899 http_proxy=http://127.0.0.1:7899
+> # 或只给 GitHub 配（git 会走该代理）
+> git config --global http.https://github.com.proxy http://127.0.0.1:7899
+> ```
+> 安装脚本内部的 pnpm 已固定使用官方 registry（`--registry=https://registry.npmjs.org`），同样会跟随系统代理。
+
 ### Windows（PowerShell）
 
 ```powershell
