@@ -204,11 +204,23 @@ function Restore-Backup {
     Err "未找到 tar.exe（Windows 10+ 自带）。请手动把备份中的文件复制到对应位置。"
     exit 1
   }
-  Push-Location $env:USERPROFILE
+  # 备份含 .dsh/ 等相对 HOME 的路径。先解到临时目录，再把 .dsh 合并进 $DSHHome
+  # （支持 DSH_HOME 自定义到其他盘），其余（.codex/.agents）解到 $env:USERPROFILE。
+  $tmp = Join-Path $env:TEMP ("dsh-restore-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+  Push-Location $tmp
   try {
     & tar -xzf $FromBackup
     if ($LASTEXITCODE -ne 0) { throw "tar 解包失败" }
   } finally { Pop-Location }
+  if (Test-Path (Join-Path $tmp ".dsh")) {
+    New-Item -ItemType Directory -Force -Path $DSHHome | Out-Null
+    Copy-Item -Recurse -Force (Join-Path $tmp ".dsh\*") $DSHHome
+    Log "已恢复 .dsh → $DSHHome"
+  }
+  if (Test-Path (Join-Path $tmp ".codex")) { Copy-Item -Recurse -Force (Join-Path $tmp ".codex") $env:USERPROFILE }
+  if (Test-Path (Join-Path $tmp ".agents")) { Copy-Item -Recurse -Force (Join-Path $tmp ".agents") $env:USERPROFILE }
+  Remove-Item -Recurse -Force $tmp
   Log "备份恢复完成（密钥/会话/好感度/skills 已还原）"
 }
 

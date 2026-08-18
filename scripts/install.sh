@@ -264,11 +264,24 @@ restore_backup() {
     exit 1
   fi
   log "从备份恢复: $FROM_BACKUP"
-  # 备份以 $HOME 为根打包相对路径，解到当前机器 $HOME（用户名不同也能正确恢复）
-  tar -xzf "$FROM_BACKUP" -C "$HOME" 2>/dev/null || {
-    warn "tar 解包部分失败（权限问题），继续尝试..."
+  # 备份含 .dsh/ 与 .codex/ 等相对 HOME 的路径。先解到临时目录，
+  # 再把 .dsh 合并进 $DSH_HOME（支持 DSH_HOME 自定义到其他盘），其余（.codex 等）解到 $HOME。
+  local tmp
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/dsh-restore.XXXXXX")"
+  if tar -xzf "$FROM_BACKUP" -C "$tmp" 2>/dev/null; then
+    if [ -d "$tmp/.dsh" ]; then
+      mkdir -p "$DSH_HOME"
+      cp -R "$tmp/.dsh/." "$DSH_HOME/"
+      log "已恢复 .dsh → $DSH_HOME"
+    fi
+    # 备份中 HOME 下的其他项（.codex/skills 等）
+    if [ -d "$tmp/.codex" ]; then cp -R "$tmp/.codex" "$HOME/"; fi
+    if [ -d "$tmp/.agents" ]; then cp -R "$tmp/.agents" "$HOME/"; fi
+  else
+    warn "tar 解包失败，尝试直接解到 HOME..."
     tar -xzf "$FROM_BACKUP" -C "$HOME" --ignore-failed-read 2>/dev/null || true
-  }
+  fi
+  rm -rf "$tmp"
   log "备份恢复完成（密钥/会话/好感度/skills 已还原）"
 }
 
