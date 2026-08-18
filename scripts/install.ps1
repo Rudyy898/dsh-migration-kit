@@ -42,6 +42,15 @@ function Ensure-Node {
   if (Get-Command node -ErrorAction SilentlyContinue) {
     $v = & node -v
     Log "Node.js 已安装: $v"
+    # 检查 Node 版本：DSH 全家桶 + pnpm 11 要求 Node >= 22
+    $major = 0
+    if ($v -match "^v?(\d+)\.") { $major = [int]$Matches[1] }
+    if ($major -lt 22) {
+      Err "Node.js 版本过旧（$v），DSH 需要 Node.js >= 22（推荐 22 LTS 或 24）"
+      Err "请升级: https://nodejs.org/ 下载 Windows Installer (.msi) LTS 版，覆盖安装即可"
+      Err "升级后请新开 PowerShell 再运行本脚本"
+      exit 1
+    }
     return
   }
   Warn "未检测到 Node.js。请先安装 Node.js LTS: https://nodejs.org/"

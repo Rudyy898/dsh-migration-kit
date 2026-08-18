@@ -76,9 +76,17 @@ detect_platform() {
 # ---------- 依赖检测 ----------
 ensure_node() {
   if command -v node >/dev/null 2>&1; then
-    local v
+    local v major
     v="$(node -v 2>/dev/null | sed 's/^v//')"
+    major="${v%%.*}"
     log "Node.js 已安装: v$v"
+    # DSH 全家桶 + pnpm 11 要求 Node >= 22
+    if [ "$major" -lt 22 ] 2>/dev/null; then
+      err "Node.js 版本过旧（v$v），DSH 需要 Node.js >= 22（推荐 22 LTS 或 24）"
+      err "请升级: https://nodejs.org/ 下载 LTS 版覆盖安装，或 brew upgrade node"
+      err "升级后重跑本脚本"
+      exit 1
+    fi
     return 0
   fi
   if [ "$DRY_RUN" = "1" ]; then return 0; fi
