@@ -75,9 +75,16 @@ function Ensure-DSHHome {
     return
   }
   Log "初始化 DSH_HOME: $DSHHome"
-  # 首次运行触发目录创建（--dump-config 只组合配置不启动 GUI）
-  & npx -y "@deepseek-ai/dsh" --profile $ProfileName --dump-config 2>$null | Out-Null
   New-Item -ItemType Directory -Force -Path (Join-Path $DSHHome "profiles") | Out-Null
+  # 提前下载 DSH runtime（首次约 300MB，视网速 2-10 分钟，静默下载中...）
+  Log "预下载 DSH runtime（首次约需几分钟，请耐心等待）..."
+  # 用 cmd /c 包裹 npx：避免 PowerShell 5.1 把 npm 的 stderr 警告（EBADENGINE 等）当成错误中断脚本
+  cmd /c "npx -y @deepseek-ai/dsh --version >nul 2>&1"
+  if ($LASTEXITCODE -ne 0) {
+    Warn "runtime 预下载未完成，将在首次启动 dsh 时自动安装"
+  } else {
+    Log "DSH runtime 就绪"
+  }
 }
 
 # ---------- 步骤 2: 搭建 web profile ----------

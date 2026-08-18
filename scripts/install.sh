@@ -118,9 +118,14 @@ ensure_dsh_home() {
   fi
   log "初始化 DSH_HOME: $DSH_HOME"
   if [ "$DRY_RUN" = "1" ]; then return 0; fi
-  # 首次运行 dsh 会创建目录结构。用 --dump-config 触发（只组合配置，不启动 GUI）
-  npx -y @deepseek-ai/dsh --profile "$PROFILE_NAME" --dump-config >/dev/null 2>&1 || true
   mkdir -p "$DSH_HOME/profiles"
+  # 提前下载 DSH runtime（首次约 300MB，视网速 2-10 分钟，静默下载中...）
+  log "预下载 DSH runtime（首次约需几分钟，请耐心等待）..."
+  if ! npx -y @deepseek-ai/dsh --version >/dev/null 2>&1; then
+    warn "runtime 预下载未完成，将在首次启动 dsh 时自动安装"
+  else
+    log "DSH runtime 就绪"
+  fi
 }
 
 # ---------- 步骤 2: 搭建 web profile ----------
