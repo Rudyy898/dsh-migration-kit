@@ -4,6 +4,10 @@
 
 > 一句话：`git clone` 下来，跑一条命令，插件、宠物、人格全部就位。普通模式只需手动填 API Key；`--from-backup` 模式连密钥/会话/好感度一起搬，完全一致。
 
+> **通用迁移**：备份携带原机的真实依赖清单（package.json）、本地插件（.local）、link 依赖源码（dsh-browser/pet 等），任意 DSH 环境（任何插件、任何配置）都能跨电脑完整还原——不再局限于本迁移包自带的环境。
+>
+> **用法**：任何电脑上 clone 本工具 → `bash scripts/export.sh`（打包自己的环境+依赖）→ 新电脑 `bash scripts/install.sh --from-backup <备份>` → 按原机依赖重建。link 依赖自动改写为可移植路径。
+
 ---
 
 ## ✨ 迁移后会得到什么（与原机一致）

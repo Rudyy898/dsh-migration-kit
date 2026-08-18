@@ -210,8 +210,8 @@ for k, v in list(d.get('dependencies', {}).items()):
             print('  link 改写:', k, '→ file:' + rel)
 if changed:
     json.dump(d, open(pkg, 'w'), indent=2, ensure_ascii=False)
-    open(pkg, 'a').write('
-')
+    with open(pkg, 'a') as f:
+        f.write('\n')
 RWP
   else
     warn "无 python3，link 依赖可能无法改写；如有 link 依赖请手动处理"
