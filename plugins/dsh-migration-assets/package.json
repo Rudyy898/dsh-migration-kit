@@ -1,0 +1,29 @@
+{
+  "name": "@dsh-migration/assets",
+  "version": "0.1.0",
+  "description": "dsh-migration-kit 跨平台宠物素材桥：DSH 内置 webServer 提供 /media/* 静态路由，取代 macOS 专用 launchd 素材进程（127.0.0.1:54123），Windows/macOS/Linux 通用。",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "./lib/client.js"
+      ],
+      "platform": "web"
+    }
+  },
+  "license": "MIT"
+}

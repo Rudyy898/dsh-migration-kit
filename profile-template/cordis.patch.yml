@@ -1,0 +1,4 @@
+# dsh-profile-web — 可移植 profile 层（迁移模板）
+# 安装脚本会把本文件复制为 $DSH_HOME/profiles/web/cordis.patch.yml
+# 内容与原机相同：用户层为空的 patch 数组（所有功能由 bundle 层提供）。
+[]

@@ -1,0 +1,40 @@
+{
+  "name": "dsh-profile-web",
+  "private": true,
+  "dependencies": {
+    "@dsh-migration/assets": "file:.local/plugins/dsh-migration-assets",
+    "@deepseek-ai/dsh-bridge-browser": "file:.local/vendor/dsh-bridge-browser",
+    "@dsh-external/dsh-agent-rp": "github:hewzhew/dsh-agent-rp#main",
+    "@dsh-external/dsh-client-ui-pet": "github:xituisuany-max/dsh-client-ui-pet#master",
+    "@dsh-external/dsh-visualize": "github:Nagi-ovo/dsh-visualize",
+    "@linxin666/dsh-web-ui-all": "^0.1.20",
+    "@liustack/modlens": "^3.18.1",
+    "@vectorize-io/hindsight-coding-agents": "^0.3.4",
+    "dsh-at-file": "github:omdsh-dev/dsh-at-file",
+    "dsh-better-sidebar": "^0.12.3",
+    "dsh-web-restart": "github:1123762794/dsh-web-restart",
+    "dshmarket": "^1.11.1",
+    "whale-girl": "github:vlln/whale-girl"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dshmarket",
+        "@linxin666/dsh-web-ui-all",
+        "@liustack/modlens",
+        "dsh-better-sidebar",
+        "dsh-at-file",
+        "@deepseek-ai/dsh-bridge-browser",
+        "@vectorize-io/hindsight-coding-agents",
+        "dsh-web-restart",
+        "@dsh-external/dsh-agent-rp",
+        "@dsh-external/dsh-visualize",
+        "@dsh-external/dsh-client-ui-pet",
+        "whale-girl",
+        "@dsh-migration/assets"
+      ]
+    }
+  }
+}

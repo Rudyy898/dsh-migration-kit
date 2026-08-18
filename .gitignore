@@ -1,0 +1,11 @@
+# 排除本地杂物
+node_modules/
+.DS_Store
+*.log
+server.mjs
+server.log
+
+# 排除敏感文件（如有意外复制）
+.credentials.yaml
+*.pem
+*.key

@@ -1,0 +1,4 @@
+# dsh-migration-assets bundle patch：把素材桥插件挂进 web profile。
+- insert:
+    - id: dsh-migration-assets
+      name: '@dsh-migration/assets'

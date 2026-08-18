@@ -1,0 +1,16 @@
+# dsh-profile-web pnpm workspace — 与原机一致（保证插件构建行为相同）
+packages:
+  - .
+
+nodeLinker: hoisted
+autoInstallPeers: false
+# 原生模块构建审批（与本机一致；node-pty/sharp/koffi 等需要编译脚本）
+allowBuilds:
+  cloudflared: true
+  cpu-features: true
+  ssh2: true
+  node-pty: true
+  '@deepseek-ai/dsh-subprocess-local': true
+  '@google/genai': true
+  koffi: true
+  protobufjs: true
