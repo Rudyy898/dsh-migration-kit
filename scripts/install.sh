@@ -279,6 +279,9 @@ restore_backup() {
   if tar -xzf "$FROM_BACKUP" -C "$tmp" 2>/dev/null; then
     if [ -d "$tmp/.dsh" ]; then
       mkdir -p "$DSH_HOME"
+      # 恢复时排除机器特有状态（workspace 注册表/项目缓存——新机器应重建，
+      # 否则跨机器会报 workspace domain inconsistent / 找不到 Mac 路径）
+      rm -rf "$tmp/.dsh/storages/workspace.json" "$tmp/.dsh/storages/session_projcache.json"
       cp -R "$tmp/.dsh/." "$DSH_HOME/"
       log "已恢复 .dsh → $DSH_HOME"
     fi

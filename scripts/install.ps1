@@ -248,6 +248,10 @@ function Restore-Backup {
   } finally { Pop-Location }
   if (Test-Path (Join-Path $tmp ".dsh")) {
     New-Item -ItemType Directory -Force -Path $DSHHome | Out-Null
+    # 恢复时排除机器特有状态（workspace 注册表/项目缓存——新机器应重建，
+    # 否则跨机器会报 workspace domain inconsistent / 找不到 Mac 路径）
+    Remove-Item -Force (Join-Path $tmp ".dsh\storages\workspace.json") -ErrorAction SilentlyContinue
+    Remove-Item -Force (Join-Path $tmp ".dsh\storages\session_projcache.json") -ErrorAction SilentlyContinue
     Copy-Item -Recurse -Force (Join-Path $tmp ".dsh\*") $DSHHome
     Log "已恢复 .dsh → $DSHHome"
   }

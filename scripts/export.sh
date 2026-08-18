@@ -48,6 +48,16 @@ ITEMS=(
   "$HOME/.agents/skills"               # agents skills（find-skills 等）
 )
 
+# 机器特有状态排除清单（跨机器恢复会因路径/ID 不一致报错，让新机器重建）：
+#   - storages/workspace.json          工作区注册表（含机器路径，恢复后 registry order 不一致）
+#   - storages/session_projcache.json  会话-项目路径缓存（含 Mac 绝对路径，Windows 不存在）
+EXCLUDE_PATTERNS=(
+  ".dsh/storages/workspace.json"
+  ".dsh/storages/session_projcache.json"
+  ".dsh/storages/*projcache*"
+  ".dsh/storages/*projection*"
+)
+
 # 组装 tar 参数（转成相对 $HOME 路径，恢复时解到新机器 $HOME，不受用户名差异影响）
 declare -a TAR_ARGS=()
 EXISTS=0
@@ -88,7 +98,10 @@ log "打包 $((${#TAR_ARGS[@]})) 项 → $OUTFILE"
 # macOS 是 BSD tar：先单次打包，失败则逐个添加（跳过不可读项）。
 (
   cd "$HOME" || exit 1
-  if ! tar -czf "$OUTFILE" "${TAR_ARGS[@]}" 2>/dev/null; then
+  # 排除机器特有状态
+  exclude_args=()
+  for pat in "${EXCLUDE_PATTERNS[@]}"; do exclude_args+=(--exclude="$pat"); done
+  if ! tar -czf "$OUTFILE" "${exclude_args[@]}" "${TAR_ARGS[@]}" 2>/dev/null; then
     warn "tar 首次打包失败（文件可能被占用/无权限），改为逐个添加..."
     rm -f "$OUTFILE"
     added=0
