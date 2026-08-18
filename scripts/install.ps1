@@ -121,6 +121,10 @@ function Setup-Profile {
 
 # ---------- 步骤 3: pnpm 安装插件 ----------
 function Install-Plugins {
+  # pnpm 的进度条写在 stderr；全局 $ErrorActionPreference=Stop 会把它当错误中断脚本，
+  # 所以在本函数内临时改为 Continue（外部命令的 stderr 只显示、不中断）。
+  $script:prevEAP = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
   # 用官方 registry：npmmirror 不同步 DSH 的 rc 版本（0.1.0-rc.x），会导致解析失败。
   # allowBuilds 已在 pnpm-workspace.yaml 放行原生模块；pnpm 11 对"新出现的"构建脚本
   # 仍会拦截（ERR_PNPM_IGNORED_BUILDS），此时用 approve-builds --all 非交互放行后重试。
@@ -128,29 +132,36 @@ function Install-Plugins {
     if ((Test-Path (Join-Path $ProfileDir "node_modules")) -and (Test-Path (Join-Path $ProfileDir "pnpm-lock.yaml"))) {
       Push-Location $ProfileDir
       try {
-        & pnpm install --frozen-lockfile --registry=https://registry.npmjs.org 2>$null
+        Write-Host "  → pnpm install（首次需下载约 200MB 依赖，请耐心等待，进度如下）" -ForegroundColor Cyan
+        & pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
         if ($LASTEXITCODE -ne 0) { & pnpm install --registry=https://registry.npmjs.org }
       } finally { Pop-Location }
     } else {
       Push-Location $ProfileDir
-      try { & pnpm install --registry=https://registry.npmjs.org } finally { Pop-Location }
+      try {
+        Write-Host "  → pnpm install（首次需下载约 200MB 依赖，请耐心等待，进度如下）" -ForegroundColor Cyan
+        & pnpm install --registry=https://registry.npmjs.org
+      } finally { Pop-Location }
     }
     return $LASTEXITCODE
   }
 
   if ((Run-PnpmInstall) -eq 0) {
+    $ErrorActionPreference = $script:prevEAP
     Log "插件安装完成"
     return
   }
 
   Warn "pnpm 拦截了原生模块构建脚本，自动放行（approve-builds --all）..."
   Push-Location $ProfileDir
-  try { & pnpm approve-builds --all 2>$null | Out-Null } finally { Pop-Location }
+  try { & pnpm approve-builds --all | Out-Null } finally { Pop-Location }
   if ((Run-PnpmInstall) -eq 0) {
+    $ErrorActionPreference = $script:prevEAP
     Log "插件安装完成（构建已放行）"
     return
   }
 
+  $ErrorActionPreference = $script:prevEAP
   Err "pnpm install 最终失败。请手动执行:"
   Err "  cd `"$ProfileDir`""
   Err "  pnpm approve-builds --all"
@@ -206,6 +217,9 @@ function Deploy-Skills {
 
 # ---------- 步骤 7: 从备份恢复（完全一致迁移） ----------
 function Restore-Backup {
+  # tar 的 stderr 只是输出，不应在 Stop 模式下中断脚本
+  $script:prevEAP = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
   if ([string]::IsNullOrEmpty($FromBackup)) { return }
   if (-not (Test-Path $FromBackup)) { Err "备份文件不存在: $FromBackup"; exit 1 }
   Log "从备份恢复: $FromBackup"
@@ -230,6 +244,7 @@ function Restore-Backup {
   if (Test-Path (Join-Path $tmp ".codex")) { Copy-Item -Recurse -Force (Join-Path $tmp ".codex") $env:USERPROFILE }
   if (Test-Path (Join-Path $tmp ".agents")) { Copy-Item -Recurse -Force (Join-Path $tmp ".agents") $env:USERPROFILE }
   Remove-Item -Recurse -Force $tmp
+  $ErrorActionPreference = $script:prevEAP
   Log "备份恢复完成（密钥/会话/好感度/skills 已还原）"
 }
 
