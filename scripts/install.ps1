@@ -133,7 +133,9 @@ function Install-Plugins {
     Push-Location $ProfileDir
     try {
       Write-Host "  → pnpm install（首次需下载约 200MB 依赖，请耐心等待，进度如下）" -ForegroundColor Cyan
-      & pnpm install --registry=https://registry.npmjs.org
+      # 用 cmd /c 调用：PowerShell 5.1 里 `& pnpm`（pnpm.ps1）的 $LASTEXITCODE 不可靠，
+      # cmd /c 保证退出码正确传递，且 pnpm 的 stderr 进度不会被误判为错误。
+      cmd /c "pnpm install --registry=https://registry.npmjs.org"
       $code = $LASTEXITCODE
     } finally { Pop-Location }
     return $code
@@ -147,7 +149,7 @@ function Install-Plugins {
 
   Warn "pnpm 拦截了原生模块构建脚本，自动放行（approve-builds --all）..."
   Push-Location $ProfileDir
-  try { & pnpm approve-builds --all | Out-Null } finally { Pop-Location }
+  try { cmd /c "pnpm approve-builds --all >nul 2>&1" } finally { Pop-Location }
   if ((Run-PnpmInstall) -eq 0) {
     $ErrorActionPreference = $script:prevEAP
     Log "插件安装完成（构建已放行）"
