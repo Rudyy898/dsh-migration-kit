@@ -137,6 +137,7 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519" git push origin main
 9. **web-ui-all 新版（0.2.0+）内置 better-sidebar** → 不能同时独立装 better-sidebar（双挂载 /sidebar/api duplicate）；模板已统一由全家桶提供
 10. **`--from-backup` 恢复必须排除机器特有状态**：`storages/workspace.json`（工作区注册表）和 `storages/session_projcache.json`（项目路径缓存）——跨机器恢复会报 `workspace domain is inconsistent` / `fatal: cannot change to '/Volumes/...'`，新机器应重建。export.sh 已自动排除，install restore 也有兜底删除
 11. **Node 版本**：DSH 全家桶 + pnpm 11 要求 Node ≥ 22（推荐 24 LTS）；install 脚本已加版本检查
+12. **pet 素材 fallback 写死 54123**（mac 专用 launchd 端口）：非 mac 平台宠物破碎。install 脚本的 patch_pet_fallback（install.sh）/ Patch-PetFallback（install.ps1）会自动把 `window.__DSH_PROXY_BRIDGE__ || "http://127.0.0.1:54123"` 补丁为 `|| ""`（同源，素材桥提供 /media/*）。注意：素材桥注入 __DSH_PROXY_BRIDGE__ 的时机晚于 pet factory 执行，不能依赖注入，必须改 fallback 本身
 
 ## 完全一致迁移（含密钥/会话/好感度）
 
