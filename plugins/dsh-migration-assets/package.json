@@ -19,9 +19,6 @@
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "inject": [
-        "./lib/client.js"
-      ],
       "platform": "web"
     }
   },
