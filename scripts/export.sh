@@ -73,6 +73,14 @@ if [ "$DRY_RUN" = "1" ]; then
 fi
 
 DATE="$(date +%Y%m%d-%H%M%S)"
+# OUTFILE 必须是绝对路径：子 shell 会 cd 到 $HOME 再执行 tar，
+# 相对路径会落在 $HOME 下（macOS 主目录通常不可写 → Failed to open）。
+if [[ "$OUT_DIR" != /* ]]; then
+  OUT_DIR="$(cd "$(pwd)" && pwd)/$OUT_DIR"
+  mkdir -p "$OUT_DIR"
+fi
+# 规范化路径（去掉 ./ 等）
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 OUTFILE="$OUT_DIR/dsh-full-backup-$DATE.tar.gz"
 
 log "打包 $((${#TAR_ARGS[@]})) 项 → $OUTFILE"
@@ -96,7 +104,8 @@ log "打包 $((${#TAR_ARGS[@]})) 项 → $OUTFILE"
       fi
     done
     if [ "$added" = "0" ] || [ ! -s "$OUTFILE" ]; then
-      err "导出失败：无法创建备份"
+      err "导出失败：无法创建备份（OUTFILE=$OUTFILE）"
+      err "提示: 请用 -o 指定一个可写目录，例如: bash scripts/export.sh -o ~/Desktop"
       exit 1
     fi
   fi
