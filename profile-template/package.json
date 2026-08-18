@@ -7,7 +7,7 @@
     "@dsh-external/dsh-agent-rp": "github:hewzhew/dsh-agent-rp#main",
     "@dsh-external/dsh-client-ui-pet": "github:xituisuany-max/dsh-client-ui-pet#master",
     "@dsh-external/dsh-visualize": "github:Nagi-ovo/dsh-visualize",
-    "@linxin666/dsh-web-ui-all": "^0.1.20",
+    "@linxin666/dsh-web-ui-all": "^0.2.0",
     "@liustack/modlens": "^3.18.1",
     "@vectorize-io/hindsight-coding-agents": "^0.3.4",
     "dsh-at-file": "github:omdsh-dev/dsh-at-file",
