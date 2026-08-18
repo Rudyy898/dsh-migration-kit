@@ -192,6 +192,30 @@ function Deploy-PetAssets {
   Log "宠物素材已部署: $PetAssetsDir"
 }
 
+# ---------- 步骤 4.5: 补丁 pet fallback（跨平台素材源） ----------
+# pet client 原 fallback 写死 http://127.0.0.1:54123（mac 专用 launchd 端口），
+# 非 mac 平台需改为同源空串（素材桥提供 /media/*）。此补丁幂等，可重复执行。
+function Patch-PetFallback {
+  $petClient = Join-Path $ProfileDir "node_modules\@dsh-external\dsh-client-ui-pet\lib\client.js"
+  if (-not (Test-Path $petClient)) {
+    Warn "pet client.js 未找到，跳过 fallback 补丁"
+    return
+  }
+  $c = Get-Content $petClient -Raw -Encoding UTF8
+  if ($c.Contains('|| ""')) {
+    Log "pet fallback 已是同源（跳过补丁）"
+    return
+  }
+  Copy-Item $petClient "$petClient.bak-54123"
+  $c = $c.Replace('window.__DSH_PROXY_BRIDGE__ || "http://127.0.0.1:54123"', 'window.__DSH_PROXY_BRIDGE__ || ""')
+  [System.IO.File]::WriteAllText($petClient, $c, (New-Object System.Text.UTF8Encoding $false))
+  if ((Get-Content $petClient -Raw).Contains('|| ""')) {
+    Log "pet fallback 已补丁为同源（跨平台素材桥）"
+  } else {
+    Warn "pet fallback 补丁未生效，请手动检查 $petClient"
+  }
+}
+
 # ---------- 步骤 5: 部署用户配置模板 ----------
 function Deploy-HomeTemplates {
   New-Item -ItemType Directory -Force -Path $DSHHome | Out-Null
@@ -273,6 +297,7 @@ Ensure-DSHHome
 Setup-Profile
 Install-Plugins
 Deploy-PetAssets
+Patch-PetFallback
 Deploy-HomeTemplates
 Deploy-Skills
 Restore-Backup

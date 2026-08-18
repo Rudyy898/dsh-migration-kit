@@ -215,6 +215,40 @@ deploy_pet_assets() {
   log "宠物素材已部署: $PET_ASSETS_DIR ($(du -sh "$PET_ASSETS_DIR" 2>/dev/null | cut -f1))"
 }
 
+# ---------- 步骤 4.5: 补丁 pet fallback（跨平台素材源） ----------
+# pet client 原 fallback 写死 http://127.0.0.1:54123（mac 专用 launchd 端口），
+# 非 mac 平台需改为同源空串（素材桥提供 /media/*）。此补丁幂等，可重复执行。
+patch_pet_fallback() {
+  if [ "$DRY_RUN" = "1" ]; then return 0; fi
+  local pet_client="$PROFILE_DIR/node_modules/@dsh-external/dsh-client-ui-pet/lib/client.js"
+  if [ ! -f "$pet_client" ]; then
+    warn "pet client.js 未找到，跳过 fallback 补丁"
+    return 0
+  fi
+  if grep -q '|| ""' "$pet_client" 2>/dev/null; then
+    log "pet fallback 已是同源（跳过补丁）"
+    return 0
+  fi
+  cp "$pet_client" "$pet_client.bak-54123"
+  # 用 perl 替换（sed 对替换串中的双引号处理不稳，perl 可靠）
+  if ! perl -pi -e 's{window\.__DSH_PROXY_BRIDGE__ \|\| "http://127\.0\.0\.1:54123"}{window.__DSH_PROXY_BRIDGE__ || ""}g' "$pet_client" 2>/dev/null; then
+    warn "perl 补丁失败，尝试 python..."
+    python3 - "$pet_client" << 'PYEOF'
+import sys
+p = sys.argv[1]
+d = open(p, encoding='utf-8').read()
+d = d.replace('window.__DSH_PROXY_BRIDGE__ || "http://127.0.0.1:54123"', 'window.__DSH_PROXY_BRIDGE__ || ""')
+open(p, 'w', encoding='utf-8').write(d)
+PYEOF
+  fi
+  rm -f "$pet_client.bak"
+  if grep -q '|| ""' "$pet_client" 2>/dev/null; then
+    log "pet fallback 已补丁为同源（跨平台素材桥）"
+  else
+    warn "pet fallback 补丁未生效，请手动检查 $pet_client"
+  fi
+}
+
 # ---------- 步骤 5: 部署用户配置模板 ----------
 deploy_home_templates() {
   if [ "$DRY_RUN" = "1" ]; then return 0; fi
@@ -312,6 +346,7 @@ main() {
   setup_profile
   install_plugins
   deploy_pet_assets
+  patch_pet_fallback
   deploy_home_templates
   deploy_skills
   restore_backup
