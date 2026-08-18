@@ -1,8 +1,8 @@
 # 🐋 dsh-migration-kit — DeepSeek Harness 跨平台迁移包
 
-把一台电脑上**已经调好的 DSH 环境**（Web GUI + 全部插件 + 大肥鱼人格 + 配置模板）一键还原到另一台电脑——**Windows / macOS 都支持**。
+把一台电脑上**已经调好的 DSH 环境**（Web GUI + 全部插件 + 大肥鱼人格 + 配置模板 + skills）一键还原到另一台电脑——**Windows / macOS 都支持**。
 
-> 一句话：`git clone` 下来，跑一条命令，插件、宠物、人格全部就位，只需手动填 API Key。
+> 一句话：`git clone` 下来，跑一条命令，插件、宠物、人格全部就位。普通模式只需手动填 API Key；`--from-backup` 模式连密钥/会话/好感度一起搬，完全一致。
 
 ---
 
@@ -17,6 +17,16 @@
 | 宠物素材 | 59MB 序列帧素材（部署到 `$DSH_HOME/data/pet-assets/`，**无需外部进程**） |
 | 配置模板 | `settings.yaml`（脱敏）、`.credentials.yaml`（空 Key 占位） |
 | 素材桥插件 | `@dsh-migration/assets` —— 取代 macOS 专用 54123 launchd 进程，**跨平台静态服务** |
+| **skills** | 迁移包 `skills/` 部署到 `~/.agents/skills/`（DSH 自动发现），含维护 skill 与新增插件 skill |
+
+### 随包分发的 skills 与文档
+
+| 文件 | 用途 | 谁能用 |
+|---|---|---|
+| `skills/dsh-migration-maintain/SKILL.md` | 维护迁移包的完整流程（更新插件/素材/配置、验证、推送） | DSH agent 自动发现（下次换会话的分身直接可用） |
+| `skills/dsh-add-plugin/SKILL.md` | 给 DSH 加新插件后如何同步到迁移包、保证跨电脑可装 | DSH agent 自动发现 |
+| `docs/MAINTENANCE.md` | 后续更新方式手册（人类可读） | 你 |
+| `docs/ADD-PLUGIN.md` | 新增插件同步说明（人类可读，含检查单） | 你 |
 
 ### 插件清单（bundle 层，与原机逐层一致）
 ```
@@ -88,6 +98,33 @@ dsh --profile web
 
 ---
 
+## 🗂️ 完全一致迁移（连密钥/会话/好感度一起搬）
+
+普通安装只还原"插件 + 配置模板"，API Key 需手动填。如果你要**跟当前机器完全一样**（密钥、会话历史、宠物好感度、codex skills 全搬）：
+
+### 旧机器：导出备份
+
+```bash
+cd dsh-migration-kit
+bash scripts/export.sh          # macOS/Linux
+# Windows: powershell -ExecutionPolicy Bypass -File scripts\export.ps1
+# 生成 dsh-full-backup-<日期>.tar.gz（含密钥、sessions/、storages/、pet.json、~/.codex/skills/）
+```
+
+⚠️ 备份含敏感信息，用加密/私有方式传输（不要放公开网盘）。
+
+### 新机器：安装 + 恢复
+
+```bash
+bash scripts/install.sh                                # 先正常安装
+bash scripts/install.sh --from-backup /path/to/dsh-full-backup-<日期>.tar.gz   # 恢复个人数据
+# Windows: powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -FromBackup D:\xxx.tar.gz
+```
+
+恢复后直接启动即可，无需再填 Key。详见 `docs/MAINTENANCE.md`。
+
+---
+
 ## 🔐 安全说明（重要）
 
 - **本仓库不包含任何真实 API Key**。`settings.yaml` 模板中 `describe-image.apiKey` 为占位符，`.credentials.yaml` 为空值。
@@ -101,8 +138,8 @@ dsh --profile web
 ```
 dsh-migration-kit/
 ├── scripts/
-│   ├── install.sh          # macOS / Linux 安装脚本
-│   └── install.ps1         # Windows 安装脚本
+│   ├── install.sh / install.ps1  # macOS/Linux + Windows 一键安装
+│   └── export.sh / export.ps1    # 导出"完全一致"备份（密钥/会话/好感度/skills）
 ├── profile-template/
 │   ├── package.json        # web profile 依赖（git/vendor 依赖，无本地 link 路径）
 │   ├── cordis.patch.yml    # profile 用户层（空 patch）
@@ -118,6 +155,12 @@ dsh-migration-kit/
 ├── assets/
 │   ├── pet/                # 宠物序列帧素材（59MB，1006 文件）
 │   └── whale-pet.png       # 鲸鱼娘立绘
+├── skills/                 # DSH skills（部署到 ~/.agents/skills/，agent 自动发现）
+│   ├── dsh-migration-maintain/SKILL.md   # 维护迁移包
+│   └── dsh-add-plugin/SKILL.md           # 新增插件同步
+├── docs/
+│   ├── MAINTENANCE.md      # 后续更新方式手册
+│   └── ADD-PLUGIN.md       # 新增插件同步手册
 └── README.md
 ```
 

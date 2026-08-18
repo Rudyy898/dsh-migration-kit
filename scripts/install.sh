@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # ============================================================================
 # dsh-migration-kit install.sh — macOS / Linux 一键迁移安装脚本
-# 把当前机器的 DSH 环境（插件、配置、人格）还原到新机器，Windows 见 install.ps1
+# 把当前机器的 DSH 环境（插件、配置、人格、skills）还原到新机器，Windows 见 install.ps1
 #
 # 用法:
-#   bash install.sh                # 交互式安装（推荐）
-#   bash install.sh --non-interactive   # 非交互（用于自动化/CI）
-#   bash install.sh --dry-run      # 只打印将要执行的步骤，不执行
+#   bash install.sh                        # 交互式安装（推荐）
+#   bash install.sh --non-interactive      # 非交互（用于自动化/CI）
+#   bash install.sh --dry-run              # 只打印将要执行的步骤，不执行
+#   bash install.sh --from-backup <file>   # 安装后从 export.sh 的备份恢复（完全一致迁移）
 #
 # 还原内容:
 #   - DSH runtime（npx @deepseek-ai/dsh）
 #   - web profile + 全部插件（宠物、梁神、全家桶等，见 profile-template/package.json）
 #   - 跨平台素材桥（dsh-migration-assets，取代 mac 专用 54123 launchd 进程）
 #   - 用户配置模板（settings.yaml / AGENTS.md 大肥鱼人格 / .credentials.yaml 空模板）
-#   - 宠物素材（从 pet 插件 git 仓库部署到 $DSH_HOME/data/pet-assets/）
+#   - 宠物素材（迁移包 assets/ → $DSH_HOME/data/pet-assets/）
+#   - skills（迁移包 skills/ → ~/.agents/skills/，DSH 自动发现）
+#   - [--from-backup] 密钥、会话历史、宠物好感度、codex skills（完全一致）
 #
 # 注意: API Key 不随本仓库分发，安装后需在 GUI 设置中手动填写。
 # ============================================================================
@@ -29,13 +32,24 @@ PROFILE_DIR="$DSH_HOME/profiles/$PROFILE_NAME"
 PET_ASSETS_DIR="$DSH_HOME/data/pet-assets"
 NON_INTERACTIVE=0
 DRY_RUN=0
+FROM_BACKUP=""
 
 # ---------- 解析参数 ----------
 for arg in "$@"; do
   case "$arg" in
     --non-interactive) NON_INTERACTIVE=1 ;;
     --dry-run) DRY_RUN=1 ;;
+    --from-backup)
+      # 下一个参数是备份文件路径
+      ;;
+    --from-backup=*) FROM_BACKUP="${arg#--from-backup=}" ;;
+    *)
+      if [ -n "${PREV_ARG:-}" ] && [ "$PREV_ARG" = "--from-backup" ]; then
+        FROM_BACKUP="$arg"
+      fi
+      ;;
   esac
+  PREV_ARG="$arg"
 done
 
 log()  { printf '\033[32m[install]\033[0m %s\n' "$*"; }
@@ -142,24 +156,36 @@ setup_profile() {
 install_plugins() {
   if [ "$DRY_RUN" = "1" ]; then return 0; fi
   # 用官方 registry：npmmirror 不同步 DSH 的 rc 版本（0.1.0-rc.x），会导致解析失败。
-  # allowBuilds 已在 pnpm-workspace.yaml 放行原生模块，pnpm 11+ 需用 approve-builds 确认。
-  if [ -d "$PROFILE_DIR/node_modules" ] && [ -f "$PROFILE_DIR/pnpm-lock.yaml" ]; then
-    log "检测到已有 node_modules，执行增量安装..."
-    (cd "$PROFILE_DIR" && pnpm install --frozen-lockfile --registry=https://registry.npmjs.org 2>/dev/null || pnpm install --registry=https://registry.npmjs.org) || {
-      err "pnpm install 失败（可能因 git 插件需要构建审批）。"
-      err "请在 $PROFILE_DIR/pnpm-workspace.yaml 的 allowBuilds 中放行提示的包后重跑。"
-      exit 1
-    }
-  else
-    log "首次安装插件（pnpm install，git 插件自动拉取，需要几分钟）..."
-    (cd "$PROFILE_DIR" && pnpm install --registry=https://registry.npmjs.org) || {
-      err "pnpm install 失败。"
-      err "常见原因: git 插件 prepare 脚本被 pnpm 拦截——按 pnpm 输出的提示，在 $PROFILE_DIR/pnpm-workspace.yaml 的 allowBuilds 放行后重跑:"
-      err "  cd \"$PROFILE_DIR\" && pnpm install --registry=https://registry.npmjs.org"
-      exit 1
-    }
+  # allowBuilds 已在 pnpm-workspace.yaml 放行原生模块；pnpm 11 对"新出现的"构建脚本
+  # 仍会拦截（ERR_PNPM_IGNORED_BUILDS），此时用 approve-builds --all 非交互放行后重试。
+  run_pnpm_install() {
+    if [ -d "$PROFILE_DIR/node_modules" ] && [ -f "$PROFILE_DIR/pnpm-lock.yaml" ]; then
+      (cd "$PROFILE_DIR" && pnpm install --frozen-lockfile --registry=https://registry.npmjs.org 2>/dev/null) \
+        || (cd "$PROFILE_DIR" && pnpm install --registry=https://registry.npmjs.org)
+    else
+      (cd "$PROFILE_DIR" && pnpm install --registry=https://registry.npmjs.org)
+    fi
+  }
+
+  if run_pnpm_install; then
+    log "插件安装完成"
+    return 0
   fi
-  log "插件安装完成"
+
+  # 构建脚本被拦截 → 非交互放行全部后重试
+  warn "pnpm 拦截了原生模块构建脚本，自动放行（approve-builds --all）..."
+  (cd "$PROFILE_DIR" && pnpm approve-builds --all 2>/dev/null) || true
+  if run_pnpm_install; then
+    log "插件安装完成（构建已放行）"
+    return 0
+  fi
+
+  err "pnpm install 最终失败。"
+  err "请手动执行:"
+  err "  cd \"$PROFILE_DIR\""
+  err "  pnpm approve-builds --all"
+  err "  pnpm install --registry=https://registry.npmjs.org"
+  exit 1
 }
 
 # ---------- 步骤 4: 部署宠物素材 ----------
@@ -205,11 +231,50 @@ deploy_home_templates() {
   fi
 }
 
+# ---------- 步骤 6: 部署 skills（DSH 在 ~/.agents/skills 发现） ----------
+deploy_skills() {
+  if [ "$DRY_RUN" = "1" ]; then return 0; fi
+  local agents_home="${DSH_AGENTS_HOME:-$HOME/.agents}"
+  local src="$REPO_DIR/skills"
+  if [ ! -d "$src" ]; then return 0; fi
+  mkdir -p "$agents_home/skills"
+  for skill_dir in "$src"/*/; do
+    [ -d "$skill_dir" ] || continue
+    local name
+    name="$(basename "$skill_dir")"
+    cp -R "$skill_dir" "$agents_home/skills/$name"
+    log "skill 已部署: ${name}（→ $agents_home/skills/）"
+  done
+}
+
+# ---------- 步骤 7: 从备份恢复（完全一致迁移） ----------
+restore_backup() {
+  if [ -z "$FROM_BACKUP" ]; then return 0; fi
+  if [ "$DRY_RUN" = "1" ]; then
+    log "[dry-run] 将从备份恢复: $FROM_BACKUP"
+    return 0
+  fi
+  if [ ! -f "$FROM_BACKUP" ]; then
+    err "备份文件不存在: $FROM_BACKUP"
+    exit 1
+  fi
+  log "从备份恢复: $FROM_BACKUP"
+  # 备份以 $HOME 为根打包相对路径，解到当前机器 $HOME（用户名不同也能正确恢复）
+  tar -xzf "$FROM_BACKUP" -C "$HOME" 2>/dev/null || {
+    warn "tar 解包部分失败（权限问题），继续尝试..."
+    tar -xzf "$FROM_BACKUP" -C "$HOME" --ignore-failed-read 2>/dev/null || true
+  }
+  log "备份恢复完成（密钥/会话/好感度/skills 已还原）"
+}
+
 # ---------- 主流程 ----------
 main() {
   local platform
   platform="$(detect_platform)"
   log "dsh-migration-kit 安装器 — 平台: $platform, DSH_HOME: $DSH_HOME"
+  if [ -n "$FROM_BACKUP" ]; then
+    log "模式: 完全一致迁移（--from-backup）"
+  fi
   echo
 
   ensure_node
@@ -219,17 +284,25 @@ main() {
   install_plugins
   deploy_pet_assets
   deploy_home_templates
+  deploy_skills
+  restore_backup
 
   echo
   log "安装完成! 🎉"
   echo
-  echo "下一步:"
-  echo "  1. 编辑 $DSH_HOME/settings.yaml，填写 describe-image.apiKey（硅基流动）"
-  echo "  2. 编辑 $DSH_HOME/.credentials.yaml，填写 DEEPSEEK_API_KEY 等 4 个 Key"
+  if [ -n "$FROM_BACKUP" ]; then
+    echo "已从备份恢复密钥与个人数据，直接启动即可:"
+  else
+    echo "下一步:"
+    echo "  1. 编辑 $DSH_HOME/settings.yaml，填写 describe-image.apiKey（硅基流动）"
+    echo "  2. 编辑 $DSH_HOME/.credentials.yaml，填写 DEEPSEEK_API_KEY 等 4 个 Key"
+  fi
   echo "  3. 启动: cd $PROFILE_DIR && dsh --profile $PROFILE_NAME"
   echo "     （或 npx -y @deepseek-ai/dsh --profile ${PROFILE_NAME}）"
   echo
-  warn "提示: 首次启动 web GUI 可能需要 ~/.dsh/settings.yaml 里没有的模型 Key，按需补齐。"
+  if [ -z "$FROM_BACKUP" ]; then
+    warn "提示: 首次启动 web GUI 可能需要 ~/.dsh/settings.yaml 里没有的模型 Key，按需补齐。"
+  fi
 }
 
 main "$@"

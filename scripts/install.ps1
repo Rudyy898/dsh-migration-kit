@@ -1,10 +1,11 @@
 # ============================================================================
 # dsh-migration-kit install.ps1 — Windows 一键迁移安装脚本
-# 把当前机器的 DSH 环境（插件、配置、人格）还原到新 Windows 电脑
+# 把当前机器的 DSH 环境（插件、配置、人格、skills）还原到新 Windows 电脑
 # macOS / Linux 见 install.sh
 #
 # 用法（PowerShell）:
 #   powershell -ExecutionPolicy Bypass -File install.ps1
+#   powershell -ExecutionPolicy Bypass -File install.ps1 -FromBackup D:\dsh-full-backup-xxx.tar.gz
 #   或（右键 → 用 PowerShell 运行）
 #
 # 还原内容:
@@ -12,10 +13,15 @@
 #   - web profile + 全部插件（宠物、梁神、全家桶等，见 profile-template/package.json）
 #   - 跨平台素材桥（dsh-migration-assets，取代 mac 专用 54123 launchd 进程）
 #   - 用户配置模板（settings.yaml / AGENTS.md 大肥鱼人格 / .credentials.yaml 空模板）
-#   - 宠物素材（从 pet 插件 git 仓库部署到 $env:USERPROFILE\.dsh\data\pet-assets\）
+#   - 宠物素材（迁移包 assets/ → $env:USERPROFILE\.dsh\data\pet-assets\）
+#   - skills（迁移包 skills/ → ~\.agents\skills\）
+#   - [-FromBackup] 密钥、会话历史、宠物好感度、codex skills（完全一致迁移）
 #
-# 注意: API Key 不随本仓库分发，安装后需在 GUI 设置中手动填写。
+# 注意: 普通安装 API Key 不随仓库分发，需手动填写；-FromBackup 模式从备份恢复。
 # ============================================================================
+param(
+  [string]$FromBackup = ""
+)
 $ErrorActionPreference = "Stop"
 
 # ---------- 常量 ----------
@@ -100,25 +106,40 @@ function Setup-Profile {
 # ---------- 步骤 3: pnpm 安装插件 ----------
 function Install-Plugins {
   # 用官方 registry：npmmirror 不同步 DSH 的 rc 版本（0.1.0-rc.x），会导致解析失败。
-  # allowBuilds 已在 pnpm-workspace.yaml 放行原生模块。
-  if ((Test-Path (Join-Path $ProfileDir "node_modules")) -and (Test-Path (Join-Path $ProfileDir "pnpm-lock.yaml"))) {
-    Log "检测到已有 node_modules，执行增量安装..."
-    Push-Location $ProfileDir
-    try {
-      & pnpm install --frozen-lockfile --registry=https://registry.npmjs.org 2>$null
-      if ($LASTEXITCODE -ne 0) { & pnpm install --registry=https://registry.npmjs.org }
-    } finally { Pop-Location }
-  } else {
-    Log "首次安装插件（pnpm install，git 插件自动拉取，需要几分钟）..."
-    Push-Location $ProfileDir
-    try { & pnpm install --registry=https://registry.npmjs.org } finally { Pop-Location }
+  # allowBuilds 已在 pnpm-workspace.yaml 放行原生模块；pnpm 11 对"新出现的"构建脚本
+  # 仍会拦截（ERR_PNPM_IGNORED_BUILDS），此时用 approve-builds --all 非交互放行后重试。
+  function Run-PnpmInstall {
+    if ((Test-Path (Join-Path $ProfileDir "node_modules")) -and (Test-Path (Join-Path $ProfileDir "pnpm-lock.yaml"))) {
+      Push-Location $ProfileDir
+      try {
+        & pnpm install --frozen-lockfile --registry=https://registry.npmjs.org 2>$null
+        if ($LASTEXITCODE -ne 0) { & pnpm install --registry=https://registry.npmjs.org }
+      } finally { Pop-Location }
+    } else {
+      Push-Location $ProfileDir
+      try { & pnpm install --registry=https://registry.npmjs.org } finally { Pop-Location }
+    }
+    return $LASTEXITCODE
   }
-  if ($LASTEXITCODE -ne 0) {
-    Err "pnpm install 失败。git 插件的 prepare 脚本可能被 pnpm 拦截，按 pnpm 输出提示放行后重试:"
-    Err "  cd `"$ProfileDir`"; pnpm install --registry=https://registry.npmjs.org"
-    exit 1
+
+  if ((Run-PnpmInstall) -eq 0) {
+    Log "插件安装完成"
+    return
   }
-  Log "插件安装完成"
+
+  Warn "pnpm 拦截了原生模块构建脚本，自动放行（approve-builds --all）..."
+  Push-Location $ProfileDir
+  try { & pnpm approve-builds --all 2>$null | Out-Null } finally { Pop-Location }
+  if ((Run-PnpmInstall) -eq 0) {
+    Log "插件安装完成（构建已放行）"
+    return
+  }
+
+  Err "pnpm install 最终失败。请手动执行:"
+  Err "  cd `"$ProfileDir`""
+  Err "  pnpm approve-builds --all"
+  Err "  pnpm install --registry=https://registry.npmjs.org"
+  exit 1
 }
 
 # ---------- 步骤 4: 部署宠物素材 ----------
@@ -154,7 +175,38 @@ function Deploy-HomeTemplates {
   }
 }
 
+# ---------- 步骤 6: 部署 skills（DSH 在 ~\.agents\skills 发现） ----------
+function Deploy-Skills {
+  $src = Join-Path $RepoDir "skills"
+  if (-not (Test-Path $src)) { return }
+  $agentsHome = if ($env:DSH_AGENTS_HOME) { $env:DSH_AGENTS_HOME } else { Join-Path $env:USERPROFILE ".agents" }
+  $skillsDir = Join-Path $agentsHome "skills"
+  New-Item -ItemType Directory -Force -Path $skillsDir | Out-Null
+  Get-ChildItem $src -Directory | ForEach-Object {
+    Copy-Item -Recurse -Force $_.FullName (Join-Path $skillsDir $_.Name)
+    Log "skill 已部署: $($_.Name)（→ $skillsDir）"
+  }
+}
+
+# ---------- 步骤 7: 从备份恢复（完全一致迁移） ----------
+function Restore-Backup {
+  if ([string]::IsNullOrEmpty($FromBackup)) { return }
+  if (-not (Test-Path $FromBackup)) { Err "备份文件不存在: $FromBackup"; exit 1 }
+  Log "从备份恢复: $FromBackup"
+  if (-not (Get-Command tar -ErrorAction SilentlyContinue)) {
+    Err "未找到 tar.exe（Windows 10+ 自带）。请手动把备份中的文件复制到对应位置。"
+    exit 1
+  }
+  Push-Location $env:USERPROFILE
+  try {
+    & tar -xzf $FromBackup
+    if ($LASTEXITCODE -ne 0) { throw "tar 解包失败" }
+  } finally { Pop-Location }
+  Log "备份恢复完成（密钥/会话/好感度/skills 已还原）"
+}
+
 # ---------- 主流程 ----------
+if ($FromBackup) { Write-Host "模式: 完全一致迁移（-FromBackup）" -ForegroundColor Yellow }
 Write-Host "dsh-migration-kit 安装器 — DSH_HOME: $DSHHome" -ForegroundColor Cyan
 Write-Host ""
 
@@ -165,14 +217,20 @@ Setup-Profile
 Install-Plugins
 Deploy-PetAssets
 Deploy-HomeTemplates
+Deploy-Skills
+Restore-Backup
 
 Write-Host ""
 Log "安装完成! 🎉"
 Write-Host ""
-Write-Host "下一步:"
-Write-Host "  1. 编辑 $DSHHome\settings.yaml，填写 describe-image.apiKey（硅基流动）"
-Write-Host "  2. 编辑 $DSHHome\.credentials.yaml，填写 DEEPSEEK_API_KEY 等 4 个 Key"
+if ($FromBackup) {
+  Write-Host "已从备份恢复密钥与个人数据，直接启动即可:"
+} else {
+  Write-Host "下一步:"
+  Write-Host "  1. 编辑 $DSHHome\settings.yaml，填写 describe-image.apiKey（硅基流动）"
+  Write-Host "  2. 编辑 $DSHHome\.credentials.yaml，填写 DEEPSEEK_API_KEY 等 4 个 Key"
+}
 Write-Host "  3. 启动: cd $ProfileDir; dsh --profile $ProfileName"
 Write-Host "     （或 npx -y @deepseek-ai/dsh --profile $ProfileName）"
 Write-Host ""
-Warn "提示: 首次启动 web GUI 若提示缺模型 Key，在 GUI 设置里补齐即可。"
+if (-not $FromBackup) { Warn "提示: 首次启动 web GUI 若提示缺模型 Key，在 GUI 设置里补齐即可。" }

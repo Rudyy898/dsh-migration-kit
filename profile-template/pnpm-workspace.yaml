@@ -4,7 +4,18 @@ packages:
 
 nodeLinker: hoisted
 autoInstallPeers: false
-# 原生模块构建审批（与本机一致；node-pty/sharp/koffi 等需要编译脚本）
+# 原生模块构建白名单（pnpm 11 的 onlyBuiltDependencies 优先于 allowBuilds；
+# 预置这些保证全新机器首次安装不被 ERR_PNPM_IGNORED_BUILDS 拦截）
+onlyBuiltDependencies:
+  - cloudflared
+  - cpu-features
+  - ssh2
+  - node-pty
+  - '@deepseek-ai/dsh-subprocess-local'
+  - '@google/genai'
+  - koffi
+  - protobufjs
+# 兼容旧版 pnpm 的 allowBuilds（10.x）
 allowBuilds:
   cloudflared: true
   cpu-features: true
