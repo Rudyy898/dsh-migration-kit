@@ -4,6 +4,12 @@ packages:
 
 nodeLinker: hoisted
 autoInstallPeers: false
+# 版本锁定：即使 GUI「更新插件」把 package.json 的版本范围改大，
+# pnpm install 也强制用这里锁定的版本（web-ui-all 0.1.20 不带 better-sidebar 聚合，
+# 避免与独立 better-sidebar 重复挂载 /sidebar/api）
+overrides:
+  '@linxin666/dsh-web-ui-all': 0.1.20
+  dsh-better-sidebar: 0.12.3
 # 原生模块构建白名单（pnpm 11 的 onlyBuiltDependencies 优先于 allowBuilds；
 # 预置这些保证全新机器首次安装不被 ERR_PNPM_IGNORED_BUILDS 拦截）
 onlyBuiltDependencies:
