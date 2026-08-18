@@ -129,21 +129,14 @@ function Install-Plugins {
   # allowBuilds 已在 pnpm-workspace.yaml 放行原生模块；pnpm 11 对"新出现的"构建脚本
   # 仍会拦截（ERR_PNPM_IGNORED_BUILDS），此时用 approve-builds --all 非交互放行后重试。
   function Run-PnpmInstall {
-    if ((Test-Path (Join-Path $ProfileDir "node_modules")) -and (Test-Path (Join-Path $ProfileDir "pnpm-lock.yaml"))) {
-      Push-Location $ProfileDir
-      try {
-        Write-Host "  → pnpm install（首次需下载约 200MB 依赖，请耐心等待，进度如下）" -ForegroundColor Cyan
-        & pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
-        if ($LASTEXITCODE -ne 0) { & pnpm install --registry=https://registry.npmjs.org }
-      } finally { Pop-Location }
-    } else {
-      Push-Location $ProfileDir
-      try {
-        Write-Host "  → pnpm install（首次需下载约 200MB 依赖，请耐心等待，进度如下）" -ForegroundColor Cyan
-        & pnpm install --registry=https://registry.npmjs.org
-      } finally { Pop-Location }
-    }
-    return $LASTEXITCODE
+    $code = 1
+    Push-Location $ProfileDir
+    try {
+      Write-Host "  → pnpm install（首次需下载约 200MB 依赖，请耐心等待，进度如下）" -ForegroundColor Cyan
+      & pnpm install --registry=https://registry.npmjs.org
+      $code = $LASTEXITCODE
+    } finally { Pop-Location }
+    return $code
   }
 
   if ((Run-PnpmInstall) -eq 0) {
