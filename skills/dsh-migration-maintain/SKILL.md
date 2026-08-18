@@ -126,7 +126,7 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519" git push origin main
 
 ## 常见坑（血泪教训）
 
-1. **pet 分支是 master**，写 `github:xituisuany-max/dsh-client-ui-pet#master`，写 main 会解析失败
+1. **pet 分支是 master**，写 `github:Rudyy898/dsh-client-ui-pet#master`（用户 fork，含跨平台 fallback 修复），写 main 会解析失败
 2. **必须用官方 registry**：`pnpm install --registry=https://registry.npmjs.org`（npmmirror 不同步 DSH 0.1.0-rc.x）
 3. **pnpm-workspace.yaml 不能少**：`nodeLinker: hoisted` + `autoInstallPeers: false` 缺失会导致全新安装解析失败
 4. **git 依赖的 files 字段会过滤文件**：pet 的 assets 靠 git 依赖装不出来，必须直接 vendor 进 `assets/`
