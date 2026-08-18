@@ -142,26 +142,79 @@ setup_profile() {
   if [ "$DRY_RUN" = "1" ]; then return 0; fi
   mkdir -p "$PROFILE_DIR"
 
-  # vendor: 复制未发布 npm 的 bridge-browser 子包
-  if [ ! -d "$PROFILE_DIR/vendor" ]; then
-    cp -R "$REPO_DIR/vendor" "$PROFILE_DIR/vendor"
-    log "vendor/ 已复制（dsh-bridge-browser）"
-  fi
+  if [ -n "$FROM_BACKUP" ] && [ -f "$BACKUP_EXTRACTED/package.json" ]; then
+    # ===== 通用迁移模式：用备份里的真实依赖清单重建 =====
+    log "检测到备份中的依赖清单，按原机环境重建（通用迁移）"
+    cp "$BACKUP_EXTRACTED/package.json" "$PROFILE_DIR/package.json"
+    [ -f "$BACKUP_EXTRACTED/pnpm-workspace.yaml" ] && cp "$BACKUP_EXTRACTED/pnpm-workspace.yaml" "$PROFILE_DIR/pnpm-workspace.yaml"
+    [ -f "$BACKUP_EXTRACTED/cordis.patch.yml" ] && cp "$BACKUP_EXTRACTED/cordis.patch.yml" "$PROFILE_DIR/cordis.patch.yml"
 
-  # profile package.json（git 依赖已去掉本地 link 路径，全平台可装）
-  cp "$REPO_DIR/profile-template/package.json" "$PROFILE_DIR/package.json"
-  cp "$REPO_DIR/profile-template/cordis.patch.yml" "$PROFILE_DIR/cordis.patch.yml"
-  # pnpm workspace（nodeLinker/allowBuilds 与原机一致；缺失会导致原生模块被 pnpm 拦截）
-  if [ ! -f "$PROFILE_DIR/pnpm-workspace.yaml" ]; then
-    cp "$REPO_DIR/profile-template/pnpm-workspace.yaml" "$PROFILE_DIR/pnpm-workspace.yaml"
+    if [ -d "$BACKUP_EXTRACTED/.local" ]; then
+      mkdir -p "$PROFILE_DIR/.local"
+      cp -R "$BACKUP_EXTRACTED/.local/." "$PROFILE_DIR/.local/"
+      log ".local/ 本地插件已从备份恢复"
+    fi
+    if [ -d "$BACKUP_EXTRACTED/vendor" ]; then
+      mkdir -p "$PROFILE_DIR/vendor"
+      cp -R "$BACKUP_EXTRACTED/vendor/." "$PROFILE_DIR/vendor/"
+      log "vendor/ 已从备份恢复"
+    fi
+    if [ -d "$BACKUP_EXTRACTED/dsh-client-ui-pet" ] && [ ! -d "$DSH_HOME/dsh-client-ui-pet" ]; then
+      mkdir -p "$DSH_HOME"
+      cp -R "$BACKUP_EXTRACTED/dsh-client-ui-pet" "$DSH_HOME/dsh-client-ui-pet"
+    fi
+    if [ -d "$BACKUP_EXTRACTED/dsh-browser" ] && [ ! -d "$DSH_HOME/dsh-browser" ]; then
+      mkdir -p "$DSH_HOME"
+      cp -R "$BACKUP_EXTRACTED/dsh-browser" "$DSH_HOME/dsh-browser"
+    fi
+    rewrite_link_deps
+  else
+    # ===== 默认模式：用迁移包模板 =====
+    cp "$REPO_DIR/profile-template/package.json" "$PROFILE_DIR/package.json"
+    cp "$REPO_DIR/profile-template/cordis.patch.yml" "$PROFILE_DIR/cordis.patch.yml"
+    if [ ! -f "$PROFILE_DIR/pnpm-workspace.yaml" ]; then
+      cp "$REPO_DIR/profile-template/pnpm-workspace.yaml" "$PROFILE_DIR/pnpm-workspace.yaml"
+    fi
+    if [ ! -d "$PROFILE_DIR/.local" ]; then
+      mkdir -p "$PROFILE_DIR/.local"
+      cp -R "$REPO_DIR/vendor" "$PROFILE_DIR/.local/vendor"
+      cp -R "$REPO_DIR/plugins" "$PROFILE_DIR/.local/plugins"
+      log ".local/ 已复制（vendor=dsh-bridge-browser, plugins=素材桥）"
+    fi
   fi
+}
 
-  # vendor/plugins: 复制未发布 npm 的本地包到 profile 的 .local/（模板用 file:.local/... 引用）
-  if [ ! -d "$PROFILE_DIR/.local" ]; then
-    mkdir -p "$PROFILE_DIR/.local"
-    cp -R "$REPO_DIR/vendor" "$PROFILE_DIR/.local/vendor"
-    cp -R "$REPO_DIR/plugins" "$PROFILE_DIR/.local/plugins"
-    log ".local/ 已复制（vendor=dsh-bridge-browser, plugins=素材桥）"
+# ---------- 依赖改写：把 link: 绝对路径转成可移植形式 ----------
+rewrite_link_deps() {
+  if [ "$DRY_RUN" = "1" ]; then return 0; fi
+  local pkg="$PROFILE_DIR/package.json"
+  [ -f "$pkg" ] || return 0
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$pkg" "$DSH_HOME" << 'RWP'
+import json, sys, os
+pkg, dsh_home = sys.argv[1], sys.argv[2]
+d = json.load(open(pkg, encoding='utf-8'))
+changed = False
+for k, v in list(d.get('dependencies', {}).items()):
+    if isinstance(v, str) and v.startswith('link:'):
+        path = v[5:]
+        cand = None
+        for name in ['dsh-client-ui-pet', 'dsh-browser']:
+            if name in path:
+                cand = os.path.join(dsh_home, name)
+                break
+        if cand:
+            rel = os.path.relpath(cand, os.path.join(dsh_home, 'profiles', 'web'))
+            d['dependencies'][k] = 'file:' + rel
+            changed = True
+            print('  link 改写:', k, '→ file:' + rel)
+if changed:
+    json.dump(d, open(pkg, 'w'), indent=2, ensure_ascii=False)
+    open(pkg, 'a').write('
+')
+RWP
+  else
+    warn "无 python3，link 依赖可能无法改写；如有 link 依赖请手动处理"
   fi
 }
 
@@ -294,6 +347,26 @@ deploy_skills() {
   done
 }
 
+# ---------- 步骤 6.5: 从备份解包依赖清单（通用迁移核心） ----------
+BACKUP_EXTRACTED=""
+extract_deps_from_backup() {
+  if [ -z "$FROM_BACKUP" ]; then return 0; fi
+  if [ "$DRY_RUN" = "1" ]; then return 0; fi
+  if [ ! -f "$FROM_BACKUP" ]; then
+    err "备份文件不存在: $FROM_BACKUP"; exit 1
+  fi
+  BACKUP_EXTRACTED="$(mktemp -d "${TMPDIR:-/tmp}/dsh-deps.XXXXXX")"
+  tar -xzf "$FROM_BACKUP" -C "$BACKUP_EXTRACTED"     .dsh/profiles/web/package.json     .dsh/profiles/web/pnpm-workspace.yaml     .dsh/profiles/web/cordis.patch.yml     .dsh/profiles/web/.local     .dsh/profiles/web/vendor     .dsh/dsh-client-ui-pet     .dsh/dsh-browser     2>/dev/null || true
+  if [ -d "$BACKUP_EXTRACTED/.dsh/profiles/web" ]; then
+    for item in package.json pnpm-workspace.yaml cordis.patch.yml .local vendor; do
+      [ -e "$BACKUP_EXTRACTED/.dsh/profiles/web/$item" ] && cp -R "$BACKUP_EXTRACTED/.dsh/profiles/web/$item" "$BACKUP_EXTRACTED/$item"
+    done
+    [ -d "$BACKUP_EXTRACTED/.dsh/dsh-client-ui-pet" ] && cp -R "$BACKUP_EXTRACTED/.dsh/dsh-client-ui-pet" "$BACKUP_EXTRACTED/dsh-client-ui-pet"
+    [ -d "$BACKUP_EXTRACTED/.dsh/dsh-browser" ] && cp -R "$BACKUP_EXTRACTED/.dsh/dsh-browser" "$BACKUP_EXTRACTED/dsh-browser"
+  fi
+  log "已从备份解包依赖清单: $BACKUP_EXTRACTED"
+}
+
 # ---------- 步骤 7: 从备份恢复（完全一致迁移） ----------
 restore_backup() {
   if [ -z "$FROM_BACKUP" ]; then return 0; fi
@@ -343,6 +416,7 @@ main() {
   ensure_node
   ensure_pnpm
   ensure_dsh_home
+  extract_deps_from_backup
   setup_profile
   install_plugins
   deploy_pet_assets

@@ -46,6 +46,14 @@ ITEMS=(
   "$DSH_HOME/attachments"              # 附件
   "$HOME/.codex/skills"                # 本机全部 skills（git-upload 等 30 个）
   "$HOME/.agents/skills"               # agents skills（find-skills 等）
+  # ---- 依赖重建信息（通用迁移核心）----
+  "$DSH_HOME/profiles/web/package.json"        # 真实依赖清单（含 git/npm/link 指向）
+  "$DSH_HOME/profiles/web/pnpm-workspace.yaml" # 构建配置（nodeLinker/allowBuilds）
+  "$DSH_HOME/profiles/web/cordis.patch.yml"    # profile 用户 patch 层
+  "$DSH_HOME/profiles/web/.local"              # 本地 file: 插件（素材桥等）
+  "$DSH_HOME/profiles/web/vendor"              # 本地 vendor 包（bridge-browser 等）
+  "$DSH_HOME/dsh-client-ui-pet"                # link 依赖源码（鲸鱼娘桌宠，排除 node_modules）
+  "$DSH_HOME/dsh-browser"                      # link 依赖源码（browser bridge，排除 node_modules）
 )
 
 # 机器特有状态排除清单（跨机器恢复会因路径/ID 不一致报错，让新机器重建）：
@@ -56,6 +64,11 @@ EXCLUDE_PATTERNS=(
   ".dsh/storages/session_projcache.json"
   ".dsh/storages/*projcache*"
   ".dsh/storages/*projection*"
+  # link 依赖仓库源码：排除 node_modules/.git 等不可迁移/大体积内容
+  ".dsh/dsh-client-ui-pet/node_modules"
+  ".dsh/dsh-client-ui-pet/.git"
+  ".dsh/dsh-browser/node_modules"
+  ".dsh/dsh-browser/.git"
 )
 
 # 组装 tar 参数（转成相对 $HOME 路径，恢复时解到新机器 $HOME，不受用户名差异影响）

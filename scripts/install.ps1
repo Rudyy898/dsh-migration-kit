@@ -23,6 +23,7 @@ param(
   [string]$FromBackup = ""
 )
 $ErrorActionPreference = "Stop"
+$script:BackupExtracted = 
 
 # ---------- 常量 ----------
 # RepoDir = 迁移包根目录（本脚本在 scripts\ 下）
@@ -101,22 +102,76 @@ function Setup-Profile {
   Log "搭建 profile: $ProfileName"
   New-Item -ItemType Directory -Force -Path $ProfileDir | Out-Null
 
-  # vendor/plugins: 复制未发布 npm 的本地包到 profile 的 .local/（模板用 file:.local/... 引用）
-  $local = Join-Path $ProfileDir ".local"
-  if (-not (Test-Path $local)) {
-    New-Item -ItemType Directory -Force -Path $local | Out-Null
-    Copy-Item -Recurse (Join-Path $RepoDir "vendor") (Join-Path $local "vendor")
-    Copy-Item -Recurse (Join-Path $RepoDir "plugins") (Join-Path $local "plugins")
-    Log ".local/ 已复制（vendor=dsh-bridge-browser, plugins=素材桥）"
+  # 通用迁移模式：用备份里的真实依赖清单重建
+  if ($FromBackup -and (Test-Path (Join-Path $BackupExtracted "package.json"))) {
+    Log "检测到备份中的依赖清单，按原机环境重建（通用迁移）"
+    Copy-Item (Join-Path $BackupExtracted "package.json") (Join-Path $ProfileDir "package.json") -Force
+    if (Test-Path (Join-Path $BackupExtracted "pnpm-workspace.yaml")) { Copy-Item (Join-Path $BackupExtracted "pnpm-workspace.yaml") (Join-Path $ProfileDir "pnpm-workspace.yaml") -Force }
+    if (Test-Path (Join-Path $BackupExtracted "cordis.patch.yml")) { Copy-Item (Join-Path $BackupExtracted "cordis.patch.yml") (Join-Path $ProfileDir "cordis.patch.yml") -Force }
+    if (Test-Path (Join-Path $BackupExtracted ".local")) {
+      New-Item -ItemType Directory -Force -Path (Join-Path $ProfileDir ".local") | Out-Null
+      Copy-Item -Recurse -Force (Join-Path $BackupExtracted ".local\*") (Join-Path $ProfileDir ".local")
+      Log ".local/ 本地插件已从备份恢复"
+    }
+    if (Test-Path (Join-Path $BackupExtracted "vendor")) {
+      New-Item -ItemType Directory -Force -Path (Join-Path $ProfileDir "vendor") | Out-Null
+      Copy-Item -Recurse -Force (Join-Path $BackupExtracted "vendor\*") (Join-Path $ProfileDir "vendor")
+      Log "vendor/ 已从备份恢复"
+    }
+    if ((Test-Path (Join-Path $BackupExtracted "dsh-client-ui-pet")) -and -not (Test-Path (Join-Path $DSHHome "dsh-client-ui-pet"))) {
+      New-Item -ItemType Directory -Force -Path $DSHHome | Out-Null
+      Copy-Item -Recurse (Join-Path $BackupExtracted "dsh-client-ui-pet") (Join-Path $DSHHome "dsh-client-ui-pet")
+    }
+    if ((Test-Path (Join-Path $BackupExtracted "dsh-browser")) -and -not (Test-Path (Join-Path $DSHHome "dsh-browser"))) {
+      Copy-Item -Recurse (Join-Path $BackupExtracted "dsh-browser") (Join-Path $DSHHome "dsh-browser")
+    }
+    Rewrite-LinkDeps
+  } else {
+    # 默认模式：用迁移包模板
+    $local = Join-Path $ProfileDir ".local"
+    if (-not (Test-Path $local)) {
+      New-Item -ItemType Directory -Force -Path $local | Out-Null
+      Copy-Item -Recurse (Join-Path $RepoDir "vendor") (Join-Path $local "vendor")
+      Copy-Item -Recurse (Join-Path $RepoDir "plugins") (Join-Path $local "plugins")
+      Log ".local/ 已复制（vendor=dsh-bridge-browser, plugins=素材桥）"
+    }
+    Copy-Item (Join-Path $RepoDir "profile-template\package.json") (Join-Path $ProfileDir "package.json") -Force
+    Copy-Item (Join-Path $RepoDir "profile-template\cordis.patch.yml") (Join-Path $ProfileDir "cordis.patch.yml") -Force
+    if (-not (Test-Path (Join-Path $ProfileDir "pnpm-workspace.yaml"))) {
+      Copy-Item (Join-Path $RepoDir "profile-template\pnpm-workspace.yaml") (Join-Path $ProfileDir "pnpm-workspace.yaml")
+    }
   }
+}
 
-  # profile package.json（git 依赖已去掉本地 link 路径，全平台可装）
-  Copy-Item (Join-Path $RepoDir "profile-template\package.json") (Join-Path $ProfileDir "package.json") -Force
-  Copy-Item (Join-Path $RepoDir "profile-template\cordis.patch.yml") (Join-Path $ProfileDir "cordis.patch.yml") -Force
-  # pnpm workspace（nodeLinker/allowBuilds 与原机一致；缺失会导致原生模块被 pnpm 拦截）
-  if (-not (Test-Path (Join-Path $ProfileDir "pnpm-workspace.yaml"))) {
-    Copy-Item (Join-Path $RepoDir "profile-template\pnpm-workspace.yaml") (Join-Path $ProfileDir "pnpm-workspace.yaml")
-  }
+# 依赖改写：link: 绝对路径 → 可移植 file: 路径
+function Rewrite-LinkDeps {
+  $pkg = Join-Path $ProfileDir "package.json"
+  if (-not (Test-Path $pkg)) { return }
+  try {
+    $d = Get-Content $pkg -Raw -Encoding UTF8 | ConvertFrom-Json
+    $changed = $false
+    $deps = @{}
+    $d.dependencies.PSObject.Properties | ForEach-Object { $deps[$_.Name] = $_.Value }
+    foreach ($k in @($deps.Keys)) {
+      $v = [string]$deps[$k]
+      if ($v.StartsWith("link:")) {
+        $cand = $null
+        foreach ($name in @("dsh-client-ui-pet", "dsh-browser")) {
+          if ($v.Contains($name)) { $cand = Join-Path $DSHHome $name; break }
+        }
+        if ($cand) {
+          $rel = [System.IO.Path]::GetRelativePath((Join-Path $DSHHome "profiles\web"), $cand).Replace("\", "/")
+          $deps[$k] = "file:$rel"
+          $changed = $true
+          Log "link 改写: $k → file:$rel"
+        }
+      }
+    }
+    if ($changed) {
+      $d.dependencies = [PSCustomObject]$deps
+      [System.IO.File]::WriteAllText($pkg, ($d | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding $false))
+    }
+  } catch { Warn "link 依赖改写失败: $($_.Exception.Message)" }
 }
 
 # ---------- 步骤 3: pnpm 安装插件 ----------
@@ -249,6 +304,28 @@ function Deploy-Skills {
   }
 }
 
+# ---------- 步骤 6.5: 从备份解包依赖清单（通用迁移核心） ----------
+function Extract-DepsFromBackup {
+  if ([string]::IsNullOrEmpty($FromBackup)) { return }
+  if (-not (Test-Path $FromBackup)) { Err "备份文件不存在: $FromBackup"; exit 1 }
+  $script:BackupExtracted = Join-Path $env:TEMP ("dsh-deps-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Force -Path $script:BackupExtracted | Out-Null
+  Push-Location $script:BackupExtracted
+  try {
+    & tar -xzf $FromBackup ".dsh/profiles/web/package.json" ".dsh/profiles/web/pnpm-workspace.yaml" ".dsh/profiles/web/cordis.patch.yml" ".dsh/profiles/web/.local" ".dsh/profiles/web/vendor" ".dsh/dsh-client-ui-pet" ".dsh/dsh-browser" 2>$null
+  } finally { Pop-Location }
+  if (Test-Path (Join-Path $script:BackupExtracted ".dsh\profiles\web")) {
+    foreach ($item in @("package.json", "pnpm-workspace.yaml", "cordis.patch.yml", ".local", "vendor")) {
+      if (Test-Path (Join-Path $script:BackupExtracted ".dsh\profiles\web\$item")) {
+        Copy-Item -Recurse -Force (Join-Path $script:BackupExtracted ".dsh\profiles\web\$item") (Join-Path $script:BackupExtracted $item)
+      }
+    }
+    if (Test-Path (Join-Path $script:BackupExtracted ".dsh\dsh-client-ui-pet")) { Copy-Item -Recurse -Force (Join-Path $script:BackupExtracted ".dsh\dsh-client-ui-pet") (Join-Path $script:BackupExtracted "dsh-client-ui-pet") }
+    if (Test-Path (Join-Path $script:BackupExtracted ".dsh\dsh-browser")) { Copy-Item -Recurse -Force (Join-Path $script:BackupExtracted ".dsh\dsh-browser") (Join-Path $script:BackupExtracted "dsh-browser") }
+  }
+  Log "已从备份解包依赖清单: $script:BackupExtracted"
+}
+
 # ---------- 步骤 7: 从备份恢复（完全一致迁移） ----------
 function Restore-Backup {
   # tar 的 stderr 只是输出，不应在 Stop 模式下中断脚本
@@ -294,6 +371,7 @@ Write-Host ""
 Ensure-Node
 Ensure-Pnpm
 Ensure-DSHHome
+Extract-DepsFromBackup
 Setup-Profile
 Install-Plugins
 Deploy-PetAssets

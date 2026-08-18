@@ -32,7 +32,15 @@ $candidates = @(
   (Join-Path $DSHHome "browser-sessions"),
   (Join-Path $DSHHome "attachments"),
   (Join-Path $env:USERPROFILE ".codex\skills"),
-  (Join-Path $env:USERPROFILE ".agents\skills")
+  (Join-Path $env:USERPROFILE ".agents\skills"),
+  # 依赖重建信息（通用迁移核心）
+  (Join-Path $DSHHome "profiles\web\package.json"),
+  (Join-Path $DSHHome "profiles\web\pnpm-workspace.yaml"),
+  (Join-Path $DSHHome "profiles\web\cordis.patch.yml"),
+  (Join-Path $DSHHome "profiles\web\.local"),
+  (Join-Path $DSHHome "profiles\web\vendor"),
+  (Join-Path $DSHHome "dsh-client-ui-pet"),
+  (Join-Path $DSHHome "dsh-browser")
 )
 foreach ($c in $candidates) { if (Test-Path $c) { $items += $c } }
 
