@@ -5,7 +5,7 @@ node_modules/
 server.mjs
 server.log
 
-# 排除敏感文件（如有意外复制）
-.credentials.yaml
+# 排除敏感文件（仅限仓库根目录；home-template/ 下的 .credentials.yaml 是空模板，需保留）
+/.credentials.yaml
 *.pem
 *.key
