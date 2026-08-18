@@ -132,6 +132,11 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519" git push origin main
 4. **git 依赖的 files 字段会过滤文件**：pet 的 assets 靠 git 依赖装不出来，必须直接 vendor 进 `assets/`
 5. **.gitignore 的 `/.credentials.yaml` 必须带前导斜杠**：否则把 `home-template/.credentials.yaml` 空模板也排除
 6. **bash 里 `$VAR` 后紧跟全角括号**（如 `$DSH_HOME（中文`）会被当变量名 → 用 `${VAR}`
+7. **PowerShell 5.1 读无 BOM UTF-8 中文会乱码/报语法错** → ps1 必须 UTF-8 BOM + CRLF
+8. **PowerShell 5.1 的 `& pnpm`/`& npx` 退出码不可靠**（stderr 触发 NativeCommandError）→ 用 `cmd /c` 包裹
+9. **web-ui-all 新版（0.2.0+）内置 better-sidebar** → 不能同时独立装 better-sidebar（双挂载 /sidebar/api duplicate）；模板已统一由全家桶提供
+10. **`--from-backup` 恢复必须排除机器特有状态**：`storages/workspace.json`（工作区注册表）和 `storages/session_projcache.json`（项目路径缓存）——跨机器恢复会报 `workspace domain is inconsistent` / `fatal: cannot change to '/Volumes/...'`，新机器应重建。export.sh 已自动排除，install restore 也有兜底删除
+11. **Node 版本**：DSH 全家桶 + pnpm 11 要求 Node ≥ 22（推荐 24 LTS）；install 脚本已加版本检查
 
 ## 完全一致迁移（含密钥/会话/好感度）
 

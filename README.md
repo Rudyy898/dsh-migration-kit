@@ -129,6 +129,7 @@ bash scripts/install.sh --from-backup /path/to/dsh-full-backup-<日期>.tar.gz  
 
 - **本仓库不包含任何真实 API Key**。`settings.yaml` 模板中 `describe-image.apiKey` 为占位符，`.credentials.yaml` 为空值。
 - 原机的 `.credentials.yaml`、`settings.yaml` 中的真实密钥、`ext-bridge-token`、会话记录（`sessions/`、`storages/`）**均未打包**。
+- **机器特有状态不迁移**：`export.sh` 自动排除 `storages/workspace.json`（工作区注册表）与 `storages/session_projcache.json`（项目路径缓存）——它们是机器绑定的，跨电脑恢复会报 `workspace domain is inconsistent` / `cannot change to '/Volumes/...'`。新电脑会自动重建。
 - 仓库可安全设为 **public**；但建议至少启用 GitHub 的 secret scanning 以便未来误提交时告警。
 
 ---
